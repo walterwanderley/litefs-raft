@@ -15,13 +15,14 @@ type RaftLeaser struct {
 	r         *raft.Raft
 	localInfo litefs.PrimaryInfo
 	pp        PrimaryProvider
+	ttl       time.Duration
 }
 
 type PrimaryProvider interface {
 	PrimaryInfo() litefs.PrimaryInfo
 }
 
-func New(r *raft.Raft, localInfo litefs.PrimaryInfo, primaryProvider PrimaryProvider) *RaftLeaser {
+func New(r *raft.Raft, localInfo litefs.PrimaryInfo, primaryProvider PrimaryProvider, ttl time.Duration) *RaftLeaser {
 	chObservation := make(chan raft.Observation)
 	observer := raft.NewObserver(chObservation, false, func(o *raft.Observation) bool {
 		_, ok := o.Data.(raft.LeaderObservation)
@@ -42,6 +43,7 @@ func New(r *raft.Raft, localInfo litefs.PrimaryInfo, primaryProvider PrimaryProv
 		r:         r,
 		localInfo: localInfo,
 		pp:        primaryProvider,
+		ttl:       ttl,
 	}
 }
 
@@ -67,7 +69,7 @@ func (l *RaftLeaser) Acquire(ctx context.Context) (litefs.Lease, error) {
 		return nil, fmt.Errorf("acquire lease: %w", err)
 	}
 
-	return newLease(l.r, time.Now()), nil
+	return newLease(l.r, time.Now(), l.ttl), nil
 }
 
 func (l *RaftLeaser) PrimaryInfo(ctx context.Context) (litefs.PrimaryInfo, error) {
@@ -80,12 +82,14 @@ func (l *RaftLeaser) PrimaryInfo(ctx context.Context) (litefs.PrimaryInfo, error
 type lease struct {
 	r         *raft.Raft
 	renewedAt time.Time
+	ttl       time.Duration
 }
 
-func newLease(r *raft.Raft, renewedAt time.Time) *lease {
+func newLease(r *raft.Raft, renewedAt time.Time, ttl time.Duration) *lease {
 	return &lease{
 		r:         r,
 		renewedAt: renewedAt,
+		ttl:       ttl,
 	}
 }
 
@@ -94,7 +98,7 @@ func (l *lease) RenewedAt() time.Time {
 }
 
 func (l *lease) TTL() time.Duration {
-	return 10 * time.Second
+	return l.ttl
 }
 
 func (l *lease) Renew(ctx context.Context) error {
