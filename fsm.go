@@ -9,8 +9,13 @@ import (
 	"github.com/superfly/litefs"
 )
 
+type PrimaryRedirectInfo struct {
+	PrimaryInfo litefs.PrimaryInfo
+	RedirectURL string
+}
+
 type FSM struct {
-	primaryInfo litefs.PrimaryInfo
+	data PrimaryRedirectInfo
 }
 
 func NewFSM() *FSM {
@@ -20,7 +25,7 @@ func NewFSM() *FSM {
 func (fsm *FSM) Apply(log *raft.Log) interface{} {
 	switch log.Type {
 	case raft.LogCommand:
-		if err := json.Unmarshal(log.Data, &fsm.primaryInfo); err != nil {
+		if err := json.Unmarshal(log.Data, &fsm.data); err != nil {
 			return fmt.Errorf("cannot read the payload: %w", err)
 		}
 	default:
@@ -35,11 +40,11 @@ func (fsm *FSM) Snapshot() (raft.FSMSnapshot, error) {
 
 func (fsm *FSM) Restore(snapshot io.ReadCloser) error {
 	defer snapshot.Close()
-	return json.NewDecoder(snapshot).Decode(&fsm.primaryInfo)
+	return json.NewDecoder(snapshot).Decode(&fsm.data)
 }
 
 func (fsm *FSM) Persist(sink raft.SnapshotSink) error {
-	err := json.NewEncoder(sink).Encode(fsm.primaryInfo)
+	err := json.NewEncoder(sink).Encode(fsm.data)
 	if err != nil {
 		return err
 	}
@@ -50,5 +55,9 @@ func (fsm *FSM) Release() {
 }
 
 func (fsm *FSM) PrimaryInfo() litefs.PrimaryInfo {
-	return fsm.primaryInfo
+	return fsm.data.PrimaryInfo
+}
+
+func (fsm *FSM) RedirectURL() string {
+	return fsm.data.RedirectURL
 }

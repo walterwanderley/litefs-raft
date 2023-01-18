@@ -13,16 +13,12 @@ import (
 
 type RaftLeaser struct {
 	r         *raft.Raft
-	localInfo litefs.PrimaryInfo
-	pp        PrimaryProvider
+	localInfo PrimaryRedirectInfo
+	fsm       *FSM
 	ttl       time.Duration
 }
 
-type PrimaryProvider interface {
-	PrimaryInfo() litefs.PrimaryInfo
-}
-
-func New(r *raft.Raft, localInfo litefs.PrimaryInfo, primaryProvider PrimaryProvider, ttl time.Duration) *RaftLeaser {
+func New(r *raft.Raft, localInfo PrimaryRedirectInfo, fsm *FSM, ttl time.Duration) *RaftLeaser {
 	chObservation := make(chan raft.Observation)
 	observer := raft.NewObserver(chObservation, false, func(o *raft.Observation) bool {
 		_, ok := o.Data.(raft.LeaderObservation)
@@ -32,7 +28,7 @@ func New(r *raft.Raft, localInfo litefs.PrimaryInfo, primaryProvider PrimaryProv
 	go func() {
 		for {
 			<-chObservation
-			b, _ := json.Marshal(litefs.PrimaryInfo{})
+			b, _ := json.Marshal(PrimaryRedirectInfo{})
 			future := r.Apply(b, time.Second)
 			if err := future.Error(); err != nil {
 				log.Println("cannot reset lease:", err.Error())
@@ -42,9 +38,13 @@ func New(r *raft.Raft, localInfo litefs.PrimaryInfo, primaryProvider PrimaryProv
 	return &RaftLeaser{
 		r:         r,
 		localInfo: localInfo,
-		pp:        primaryProvider,
+		fsm:       fsm,
 		ttl:       ttl,
 	}
+}
+
+func (l *RaftLeaser) RedirectURL() string {
+	return l.fsm.RedirectURL()
 }
 
 func (l *RaftLeaser) Close() error {
@@ -56,7 +56,7 @@ func (l *RaftLeaser) Close() error {
 }
 
 func (l *RaftLeaser) AdvertiseURL() string {
-	return l.localInfo.AdvertiseURL
+	return l.localInfo.PrimaryInfo.AdvertiseURL
 }
 
 func (l *RaftLeaser) Acquire(ctx context.Context) (litefs.Lease, error) {
@@ -73,10 +73,10 @@ func (l *RaftLeaser) Acquire(ctx context.Context) (litefs.Lease, error) {
 }
 
 func (l *RaftLeaser) PrimaryInfo(ctx context.Context) (litefs.PrimaryInfo, error) {
-	if l.pp.PrimaryInfo().AdvertiseURL == "" {
+	if l.fsm.PrimaryInfo().AdvertiseURL == "" {
 		return litefs.PrimaryInfo{}, litefs.ErrNoPrimary
 	}
-	return l.pp.PrimaryInfo(), nil
+	return l.fsm.PrimaryInfo(), nil
 }
 
 type lease struct {
@@ -110,7 +110,7 @@ func (l *lease) Renew(ctx context.Context) error {
 }
 
 func (l *lease) Close() error {
-	b, _ := json.Marshal(litefs.PrimaryInfo{})
+	b, _ := json.Marshal(PrimaryRedirectInfo{})
 	future := l.r.Apply(b, time.Second)
 	if err := future.Error(); err != nil {
 		return err
