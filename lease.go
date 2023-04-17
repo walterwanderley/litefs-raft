@@ -11,6 +11,9 @@ import (
 	"github.com/superfly/litefs"
 )
 
+var _ litefs.Leaser = &RaftLeaser{}
+var _ litefs.Lease = &lease{}
+
 type RaftLeaser struct {
 	r         *raft.Raft
 	localInfo PrimaryRedirectInfo
@@ -72,6 +75,10 @@ func (l *RaftLeaser) Acquire(ctx context.Context) (litefs.Lease, error) {
 	return newLease(l.r, time.Now(), l.ttl), nil
 }
 
+func (l *RaftLeaser) AcquireExisting(ctx context.Context, leaseID string) (litefs.Lease, error) {
+	return nil, fmt.Errorf("raft lease handoff not supported yet")
+}
+
 func (l *RaftLeaser) PrimaryInfo(ctx context.Context) (litefs.PrimaryInfo, error) {
 	if l.fsm.PrimaryInfo().AdvertiseURL == "" {
 		return litefs.PrimaryInfo{}, litefs.ErrNoPrimary
@@ -93,6 +100,10 @@ func newLease(r *raft.Raft, renewedAt time.Time, ttl time.Duration) *lease {
 	}
 }
 
+func (l *lease) ID() string {
+	return ""
+}
+
 func (l *lease) RenewedAt() time.Time {
 	return l.renewedAt
 }
@@ -106,6 +117,14 @@ func (l *lease) Renew(ctx context.Context) error {
 		return litefs.ErrLeaseExpired
 	}
 	l.renewedAt = time.Now()
+	return nil
+}
+
+func (l *lease) Handoff(nodeID uint64) error {
+	return fmt.Errorf("raft lease does not support handoff yet")
+}
+
+func (l *lease) HandoffCh() <-chan uint64 {
 	return nil
 }
 
