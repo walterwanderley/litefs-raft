@@ -46,6 +46,10 @@ func New(r *raft.Raft, localInfo PrimaryRedirectInfo, fsm *FSM, ttl time.Duratio
 	}
 }
 
+func (l *RaftLeaser) Type() string {
+	return "raft"
+}
+
 func (l *RaftLeaser) RedirectURL() string {
 	return l.fsm.RedirectURL()
 }
@@ -84,6 +88,14 @@ func (l *RaftLeaser) PrimaryInfo(ctx context.Context) (litefs.PrimaryInfo, error
 		return litefs.PrimaryInfo{}, litefs.ErrNoPrimary
 	}
 	return l.fsm.PrimaryInfo(), nil
+}
+
+func (l *RaftLeaser) ClusterID(ctx context.Context) (string, error) {
+	return "", nil
+}
+
+func (l *RaftLeaser) SetClusterID(ctx context.Context, clusterID string) error {
+	return nil
 }
 
 type lease struct {
