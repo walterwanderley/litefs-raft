@@ -46,6 +46,10 @@ func New(r *raft.Raft, localInfo PrimaryRedirectInfo, fsm *FSM, ttl time.Duratio
 	}
 }
 
+func (l *RaftLeaser) Hostname() string {
+	return l.localInfo.PrimaryInfo.Hostname
+}
+
 func (l *RaftLeaser) Type() string {
 	return "raft"
 }
@@ -132,7 +136,7 @@ func (l *lease) Renew(ctx context.Context) error {
 	return nil
 }
 
-func (l *lease) Handoff(nodeID uint64) error {
+func (l *lease) Handoff(ctx context.Context, nodeID uint64) error {
 	return fmt.Errorf("raft lease does not support handoff yet")
 }
 
